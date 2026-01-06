@@ -1,73 +1,85 @@
 # ============================================================
-# Makefile — Giga Hash Map (Arena-backed Benchmark)
+# Giga Hash Map — static library + benchmark (C89)
 # ============================================================
 
 CC      ?= cc
+AR      ?= ar
+ARFLAGS := rcs
 CFLAGS  := -std=c89 -O2 -Wall -Wextra -Wpedantic
 
 # ------------------------------------------------------------
 # Paths
 # ------------------------------------------------------------
 
-DEPS_DIR    := deps
-ARENA_DIR   := $(DEPS_DIR)/giga-arena
-ARENA_REPO  := https://github.com/DonnieTD/giga-arena
-ARENA_STAMP := $(ARENA_DIR)/.fetched
-ARENA_SRC   := $(ARENA_DIR)/main.c
+ARENA_DIR  := ../giga-arena
+ARENA_INC  := $(ARENA_DIR)/include
+ARENA_LIB  := $(ARENA_DIR)/dist/libgiga-arena.a
 
-HASHMAP_SRC := main.c
-BIN := giga_hashmap_bench
+SRC_DIR    := src
+INC_DIR    := include
+BENCH_DIR  := bench
+
+BUILD_DIR  := build
+DIST_DIR   := dist
+
+LIB        := $(DIST_DIR)/libgiga-hashmap.a
+BENCH_BIN  := giga_hashmap_bench
 
 # ------------------------------------------------------------
-# Default target
+# Sources
+# ------------------------------------------------------------
+
+HASHMAP_SRC := $(SRC_DIR)/hashmap.c
+HASHMAP_OBJ := $(BUILD_DIR)/hashmap.o
+BENCH_SRC   := $(BENCH_DIR)/main.c
+
+INCLUDES := -I$(INC_DIR) -I$(ARENA_INC)
+
+# ------------------------------------------------------------
+# Default
 # ------------------------------------------------------------
 
 .PHONY: all
-all: $(BIN)
+all: lib bench
 
 # ------------------------------------------------------------
-# Fetch giga-arena (stamp-based)
+# Dirs
 # ------------------------------------------------------------
 
-$(ARENA_STAMP):
-	@echo "Fetching giga-arena..."
-	@mkdir -p $(DEPS_DIR)
-	@if [ ! -d "$(ARENA_DIR)" ]; then \
-		git clone $(ARENA_REPO) $(ARENA_DIR); \
-	fi
-	@touch $(ARENA_STAMP)
+$(BUILD_DIR):
+	@mkdir -p $@
+
+$(DIST_DIR):
+	@mkdir -p $@
 
 # ------------------------------------------------------------
-# Teach make that main.c comes from the clone
+# Objects
 # ------------------------------------------------------------
 
-$(ARENA_SRC): $(ARENA_STAMP)
-	@true
+$(HASHMAP_OBJ): $(HASHMAP_SRC) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
 
 # ------------------------------------------------------------
-# Build objects
+# Static library
 # ------------------------------------------------------------
 
-arena.o: $(ARENA_SRC)
-	$(CC) $(CFLAGS) -DGIGA_ARENA_NO_MAIN -c $(ARENA_SRC) -o arena.o
+$(LIB): $(HASHMAP_OBJ) | $(DIST_DIR)
+	$(AR) $(ARFLAGS) $@ $(HASHMAP_OBJ)
 
-hashmap.o: $(HASHMAP_SRC)
-	$(CC) $(CFLAGS) -c $(HASHMAP_SRC) -o hashmap.o
-
-# ------------------------------------------------------------
-# Link
-# ------------------------------------------------------------
-
-$(BIN): arena.o hashmap.o
-	$(CC) arena.o hashmap.o -o $(BIN)
+.PHONY: lib
+lib: $(LIB)
 
 # ------------------------------------------------------------
-# Run benchmark
+# Benchmark
 # ------------------------------------------------------------
 
-.PHONY: run
-run: $(BIN)
-	./$(BIN)
+.PHONY: bench
+bench: $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) \
+		$(BENCH_SRC) \
+		$(LIB) \
+		$(ARENA_LIB) \
+		-o $(BENCH_BIN)
 
 # ------------------------------------------------------------
 # Clean
@@ -75,13 +87,4 @@ run: $(BIN)
 
 .PHONY: clean
 clean:
-	rm -f *.o $(BIN)
-
-# ------------------------------------------------------------
-# Remove dependencies
-# ------------------------------------------------------------
-
-.PHONY: distclean
-distclean: clean
-	rm -rf $(DEPS_DIR)
-
+	rm -rf $(BUILD_DIR) $(DIST_DIR) $(BENCH_BIN)
